@@ -701,7 +701,17 @@ else:
 
 df_week_table['Total'] = df_week_table.sum(axis=1)
 df_week_table = df_week_table.sort_values('Total', ascending=False)
-df_week_table = df_week_table[['Total'] + [col for col in df_week_table.columns if col != 'Total']]
+
+# Trial Week 컬럼들을 숫자 순서로 정렬
+if view_mode != "Recent 4 Weeks":
+    # Trial Week 컬럼들만 추출하고 숫자로 정렬
+    trial_week_cols = [col for col in df_week_table.columns if col != 'Total' and 'Trial Week' in str(col)]
+    # Trial Week 숫자 추출해서 정렬
+    trial_week_cols.sort(key=lambda x: int(x.split()[-1]))
+    df_week_table = df_week_table[['Total'] + trial_week_cols]
+else:
+    df_week_table = df_week_table[['Total'] + [col for col in df_week_table.columns if col != 'Total']]
+
 df_week_table.loc['Total'] = df_week_table.sum(numeric_only=True)
 
 # 0을 '-'로 대체
