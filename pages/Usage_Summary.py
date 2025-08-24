@@ -20,6 +20,27 @@ USAGE_URL = "https://raw.githubusercontent.com/ghann670/streamlit/main/df_usage.
 USERS_LOCAL = "df_users.xlsx"
 USERS_URL = "https://raw.githubusercontent.com/ghann670/streamlit_new/main/df_users.xlsx"
 
+USERS_DATE_LOCAL = "users.xlsx"
+USERS_DATE_URL = "https://raw.githubusercontent.com/ghann670/streamlit_new/main/users.xlsx"
+
+@st.cache_data(show_spinner=False)
+def load_trial_dates_df() -> pd.DataFrame:
+    """Load trial dates data from users.xlsx date sheet"""
+    # Try local first
+    if os.path.exists(USERS_DATE_LOCAL):
+        try:
+            return pd.read_excel(USERS_DATE_LOCAL, sheet_name='date')
+        except Exception as e:
+            st.warning(f"Failed to read local '{USERS_DATE_LOCAL}' date sheet: {e}. Falling back to remote…")
+    # Fall back to remote
+    try:
+        r = requests.get(USERS_DATE_URL, timeout=30)
+        r.raise_for_status()
+        return pd.read_excel(io.BytesIO(r.content), sheet_name='date')
+    except Exception as e:
+        st.error("Failed to load trial dates data from both local file and remote URL.")
+        st.stop()
+
 @st.cache_data(show_spinner=False)
 def load_users_df() -> pd.DataFrame:
     """Load users data from local file if available, else fall back to remote URL.
@@ -61,6 +82,7 @@ def load_usage_df() -> pd.DataFrame:
 
 df_usage = load_usage_df()
 df_users = load_users_df()
+df_trial_dates = load_trial_dates_df()
 
 # df_usage 전처리 (df_all 대신 직접 사용)
 # normalize helper
@@ -130,13 +152,18 @@ selected_org = st.selectbox("Select Organization", org_list_sorted, index=defaul
 # 선택된 조직의 usage 데이터 필터링
 df_usage_org = df_usage[df_usage['organization'] == selected_org]
 
-# 임시로 organization의 첫 이벤트 날짜를 trial_start_date로 사용
-if 'trial_start_date' not in df_usage_org.columns or df_usage_org['trial_start_date'].isna().all():
+# users.xlsx의 date 시트에서 정확한 trial_start_date 가져오기
+org_trial_info = df_trial_dates[df_trial_dates['organization'] == selected_org]
+if not org_trial_info.empty:
+    trial_start_date = pd.to_datetime(org_trial_info['trial_start_date'].iloc[0])
+else:
+    # fallback: organization의 첫 이벤트 날짜 사용
     if not df_usage_org.empty and not df_usage_org['created_at'].isna().all():
         trial_start_date = df_usage_org['created_at'].min()
     else:
-        trial_start_date = pd.Timestamp.now()  # 데이터가 없는 경우 현재 날짜 사용
-    df_usage_org['trial_start_date'] = trial_start_date
+        trial_start_date = pd.Timestamp.now()
+        
+df_usage_org['trial_start_date'] = trial_start_date
 
 # Metric 계산 - df_users.xlsx와 df_usage 기반으로 수정  
 total_events = len(df_usage_org)  # All Events = 선택된 조직의 usage 데이터 전체 카운트
