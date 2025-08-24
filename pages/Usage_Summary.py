@@ -104,6 +104,7 @@ for src, dst in [
     ("Status", "status"),
     ("Division", "division"),
     ("Trial Start Date", "trial_start_date"),
+    ("ID", "id"),
 ]:
     src_col = get(src)
     if src_col:
@@ -1087,7 +1088,7 @@ st.markdown("---")
 st.subheader("📈 LinqAlpha Response Time Analysis")
 
 # 데이터 전처리
-df_time = df_all.copy()
+df_time = df_usage_org.copy()
 # 이상치 처리
 df_time.loc[df_time['time_to_first_byte'] <= 0, 'time_to_first_byte'] = None
 df_time.loc[df_time['time_to_first_byte'] > 300000, 'time_to_first_byte'] = None  # 5분 초과 제거
