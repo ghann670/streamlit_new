@@ -17,6 +17,28 @@ if st.button("🔄 Clear Cache & Refresh"):
 USAGE_LOCAL = "df_usage.xlsx"
 USAGE_URL = "https://raw.githubusercontent.com/ghann670/streamlit/main/df_usage.xlsx"
 
+USERS_LOCAL = "df_users.xlsx"
+USERS_URL = "https://raw.githubusercontent.com/ghann670/streamlit_new/main/df_users.xlsx"
+
+@st.cache_data(show_spinner=False)
+def load_users_df() -> pd.DataFrame:
+    """Load users data from local file if available, else fall back to remote URL.
+    Stops the app with an error message if both sources fail."""
+    # Try local first
+    if os.path.exists(USERS_LOCAL):
+        try:
+            return pd.read_excel(USERS_LOCAL)
+        except Exception as e:
+            st.warning(f"Failed to read local '{USERS_LOCAL}': {e}. Falling back to remote…")
+    # Fall back to remote
+    try:
+        r = requests.get(USERS_URL, timeout=30)
+        r.raise_for_status()
+        return pd.read_excel(io.BytesIO(r.content))
+    except Exception as e:
+        st.error("Failed to load users data from both local file and remote URL. Please check the data source.")
+        st.stop()
+
 @st.cache_data(show_spinner=False)
 def load_usage_df() -> pd.DataFrame:
     """Load usage data from local file if available, else fall back to remote URL.
@@ -38,6 +60,7 @@ def load_usage_df() -> pd.DataFrame:
 
 
 df_usage = load_usage_df()
+df_users = load_users_df()
 
 # normalize helper
 _norm = lambda s: "".join(str(s).strip().lower().replace("_", " ").split())
@@ -124,10 +147,25 @@ if 'trial_start_date' not in df_org.columns or df_org['trial_start_date'].isna()
         trial_start_date = pd.Timestamp.now()  # 데이터가 없는 경우 현재 날짜 사용
     df_org['trial_start_date'] = trial_start_date
 
-# Metric 계산
+# Metric 계산 - df_users.xlsx 기반으로 수정
 total_events = df_org.shape[0]
-total_users = df_org['user_email'].nunique()
-active_users = df_active['user_email'].nunique()
+
+# df_users에서 선택된 organization의 total users 계산
+if 'organization' in df_users.columns:
+    df_users_org = df_users[df_users['organization'] == selected_org]
+else:
+    # organization 컬럼이 없으면 전체 사용자
+    df_users_org = df_users
+
+total_users = len(df_users_org)
+
+# df_users에서 status가 'active'인 사용자 계산
+if 'status' in df_users_org.columns:
+    active_users = len(df_users_org[df_users_org['status'] == 'active'])
+else:
+    # status 컬럼이 없으면 모든 사용자를 active로 간주
+    active_users = total_users
+
 active_ratio = f"{active_users} / {total_users}"
 
 # Top user
