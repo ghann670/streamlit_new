@@ -277,7 +277,7 @@ with status_col2:
         recent_date = df_usage_active['created_at'].max()
         if pd.notna(recent_date):
             two_weeks_ago = recent_date - pd.Timedelta(days=14)
-            recent_users = df_usage_active[df_usage_active['created_at'] >= two_weeks_ago]['user_name'].unique()
+            recent_users = df_usage_active[df_usage_active['created_at'] >= two_weeks_ago]['user_name'].dropna().unique()
             consistent_display = ", ".join(sorted(recent_users)) if len(recent_users) > 0 else "—"
         else:
             consistent_display = "—"
