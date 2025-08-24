@@ -190,11 +190,12 @@ else:
 # ✅ Invited & No-Usage Users 추출 - df_users.xlsx 기반으로 수정 (중복 제거)
 if 'status' in df_users_org.columns:
     invited_emails = df_users_org[df_users_org['status'] == 'invited_not_joined']['user_email'].dropna().unique() if 'user_email' in df_users_org.columns else []
-    joined_no_usage_emails = df_users_org[df_users_org['status'] == 'joined_no_usage']['user_email'].dropna().unique() if 'user_email' in df_users_org.columns else []
+    # joined but no usage = status가 null/NaN인 사용자들
+    joined_no_usage_emails = df_users_org[df_users_org['status'].isna()]['user_email'].dropna().unique() if 'user_email' in df_users_org.columns else []
 else:
-    # status 컬럼이 없으면 usage 데이터에서 fallback (중복 제거)
-    invited_emails = df_usage_org[df_usage_org['status'] == 'invited_not_joined']['user_email'].dropna().unique() if 'status' in df_usage_org.columns else []
-    joined_no_usage_emails = df_usage_org[df_usage_org['status'] == 'joined_no_usage']['user_email'].dropna().unique() if 'status' in df_usage_org.columns else []
+    # status 컬럼이 없으면 빈 배열
+    invited_emails = []
+    joined_no_usage_emails = []
 
 invited_display = ", ".join(invited_emails) if len(invited_emails) > 0 else "—"
 joined_display = ", ".join(joined_no_usage_emails) if len(joined_no_usage_emails) > 0 else "—"
@@ -328,7 +329,7 @@ end_date = pd.Timestamp.now()
 default_start = pd.Timestamp('2025-01-01')
 
 # 조직별 trial_start_date 확인
-df_active_org = df_active.copy()
+df_active_org = df_usage_active.copy()
 
 # 2024년 trial_start_date를 가진 조직은 2025-01-01부터 시작하도록 조정
 df_active_org.loc[df_active_org['trial_start_date'].dt.year == 2024, 'trial_start_date'] = default_start
@@ -430,7 +431,7 @@ st.markdown("### 👥 Users' Daily Usage (2025 Data Only)")
 
 # 유저별 일별 사용량 집계 (각 유저의 첫 사용일부터 현재까지)
 # 실제 사용량 데이터 집계 (2025년 데이터만)
-df_2025 = df_active_org[df_active_org['created_at'].dt.year == 2025]
+df_2025 = df_usage_active[df_usage_active['created_at'].dt.year == 2025]
 
 # 각 유저의 첫 사용일 찾기 (2025년 기준)
 user_first_dates = df_2025.groupby('user_name')['created_at'].min().reset_index()
@@ -587,7 +588,7 @@ st.markdown("---")
 
 # Trial Start Date 계산
 try:
-    trial_start = pd.to_datetime(df_org['trial_start_date'].iloc[0]).strftime('%Y-%m-%d')
+    trial_start = pd.to_datetime(df_usage_org['trial_start_date'].iloc[0]).strftime('%Y-%m-%d')
 except (IndexError, pd.errors.OutOfBoundsDatetime):
     trial_start = pd.Timestamp.now().strftime('%Y-%m-%d')
 
