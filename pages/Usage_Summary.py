@@ -190,9 +190,14 @@ if not df_active.empty and active_users > 0:
 else:
     saved_display = "—"
 
-# ✅ Invited & No-Usage Users 추출
-invited_emails = df_org[df_org['status'] == 'invited_not_joined']['user_email'].dropna().unique()
-joined_no_usage_emails = df_org[df_org['status'] == 'joined_no_usage']['user_email'].dropna().unique()
+# ✅ Invited & No-Usage Users 추출 - df_users.xlsx 기반으로 수정
+if 'status' in df_users_org.columns:
+    invited_emails = df_users_org[df_users_org['status'] == 'invited_not_joined']['user_email'].dropna().unique() if 'user_email' in df_users_org.columns else []
+    joined_no_usage_emails = df_users_org[df_users_org['status'] == 'joined_no_usage']['user_email'].dropna().unique() if 'user_email' in df_users_org.columns else []
+else:
+    # status 컬럼이 없으면 usage 데이터에서 fallback
+    invited_emails = df_org[df_org['status'] == 'invited_not_joined']['user_email'].dropna().unique()
+    joined_no_usage_emails = df_org[df_org['status'] == 'joined_no_usage']['user_email'].dropna().unique()
 
 invited_display = ", ".join(invited_emails) if len(invited_emails) > 0 else "—"
 joined_display = ", ".join(joined_no_usage_emails) if len(joined_no_usage_emails) > 0 else "—"
