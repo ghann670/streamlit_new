@@ -159,13 +159,14 @@ else:
 
 active_ratio = f"{active_users} / {total_users}"
 
-# Top user (df_usage_org에서 active users의 이메일 기준으로 계산)
+# df_usage_active 정의 (여러 섹션에서 사용)
 if 'user_email' in df_users_org.columns and 'status' in df_users_org.columns:
     active_user_emails = df_users_org[df_users_org['status'] == 'active']['user_email'].tolist()
     df_usage_active = df_usage_org[df_usage_org['user_email'].isin(active_user_emails)]
 else:
     df_usage_active = df_usage_org  # fallback to all usage
 
+# Top user 계산
 if not df_usage_active['user_name'].dropna().empty:
     top_user = df_usage_active['user_name'].value_counts().idxmax()
     top_user_count = df_usage_active['user_name'].value_counts().max()
@@ -271,12 +272,15 @@ with status_col2:
     normal_only_display = ", ".join(normal_only_users) if normal_only_users else "—"
 
     # Recent 2 Weeks Active Users 찾기 (최근 2주간 활성 사용자)
-    if not df_usage_active.empty:
+    if not df_usage_active.empty and 'created_at' in df_usage_active.columns:
         # 최근 2주간 활성 사용자 찾기
         recent_date = df_usage_active['created_at'].max()
-        two_weeks_ago = recent_date - pd.Timedelta(days=14)
-        recent_users = df_usage_active[df_usage_active['created_at'] >= two_weeks_ago]['user_name'].unique()
-        consistent_display = ", ".join(sorted(recent_users)) if len(recent_users) > 0 else "—"
+        if pd.notna(recent_date):
+            two_weeks_ago = recent_date - pd.Timedelta(days=14)
+            recent_users = df_usage_active[df_usage_active['created_at'] >= two_weeks_ago]['user_name'].unique()
+            consistent_display = ", ".join(sorted(recent_users)) if len(recent_users) > 0 else "—"
+        else:
+            consistent_display = "—"
     else:
         consistent_display = "—"
 
@@ -626,30 +630,30 @@ if view_mode == "Recent 4 Weeks":
         return None
     
     # 이 섹션에서만 week_bucket 할당
-    df_org['week_bucket'] = df_org['created_at'].apply(assign_week_bucket)
+    df_usage_org['week_bucket'] = df_usage_org['created_at'].apply(assign_week_bucket)
 
 if view_mode == f"Trial Period (Trial Start Date: {trial_start})":
     # trial_start_date 기준으로 주차 계산
-    df_org['week_from_trial'] = ((df_org['created_at'] - df_org['trial_start_date'])
+    df_usage_org['week_from_trial'] = ((df_usage_org['created_at'] - df_usage_org['trial_start_date'])
                                 .dt.days // 7 + 1)
     
     # trial_start_date와 같은 날짜(0)도 1주차로 처리
-    df_org.loc[df_org['week_from_trial'] <= 1, 'week_from_trial'] = 1
+    df_usage_org.loc[df_usage_org['week_from_trial'] <= 1, 'week_from_trial'] = 1
     
     # week 포맷팅 (소수점 제거)
-    df_org['week_from_trial'] = df_org['week_from_trial'].fillna(1)  # nan을 1로 처리
-    df_org['week_from_trial'] = df_org['week_from_trial'].map(lambda x: f'Trial Week {int(x)}')
+    df_usage_org['week_from_trial'] = df_usage_org['week_from_trial'].fillna(1)  # nan을 1로 처리
+    df_usage_org['week_from_trial'] = df_usage_org['week_from_trial'].map(lambda x: f'Trial Week {int(x)}')
     
-    df_chart = df_org.groupby(['week_from_trial', 'agent_type']).size().reset_index(name='count')
+    df_chart = df_usage_org.groupby(['week_from_trial', 'agent_type']).size().reset_index(name='count')
     
     # 누락된 week_from_trial, agent_type 조합 채워넣기
-    all_weeks = sorted(df_org['week_from_trial'].unique())
+    all_weeks = sorted(df_usage_org['week_from_trial'].unique())
     all_agents = df_chart['agent_type'].unique()
     all_combinations = pd.MultiIndex.from_product([all_weeks, all_agents], names=['week_from_trial', 'agent_type']).to_frame(index=False)
     df_chart = pd.merge(all_combinations, df_chart, on=['week_from_trial', 'agent_type'], how='left')
     df_chart['count'] = df_chart['count'].fillna(0).astype(int)
 else:
-    df_chart = df_org.groupby(['week_bucket', 'agent_type']).size().reset_index(name='count')
+    df_chart = df_usage_org.groupby(['week_bucket', 'agent_type']).size().reset_index(name='count')
 
     # 누락된 week_bucket, agent_type 조합 채워넣기
     all_weeks = list(week_ranges.keys())
