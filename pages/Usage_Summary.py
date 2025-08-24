@@ -62,6 +62,7 @@ def load_usage_df() -> pd.DataFrame:
 df_usage = load_usage_df()
 df_users = load_users_df()
 
+# df_usage 전처리 (df_all 대신 직접 사용)
 # normalize helper
 _norm = lambda s: "".join(str(s).strip().lower().replace("_", " ").split())
 colmap = {_norm(c): c for c in df_usage.columns}
@@ -86,37 +87,28 @@ for src, dst in [
     if src_col:
         rename_map[src_col] = dst
 
-df_all = df_usage.rename(columns=rename_map).copy()
+df_usage = df_usage.rename(columns=rename_map)
 
-# ensure required columns
-for col, default in [
-    ("status", "active"),
-]:
-    if col not in df_all.columns:
-        df_all[col] = default
-    else:
-        df_all[col] = df_all[col].fillna(default)
+# datetime parsing for df_usage
+if "created_at" in df_usage.columns:
+    df_usage['created_at'] = pd.to_datetime(df_usage['created_at'], errors='coerce', utc=True).dt.tz_localize(None)
+if "trial_start_date" in df_usage.columns:
+    df_usage['trial_start_date'] = pd.to_datetime(df_usage['trial_start_date'], errors='coerce')
 
-# datetime parsing
-if "created_at" in df_all.columns:
-    df_all['created_at'] = pd.to_datetime(df_all['created_at'], errors='coerce', utc=True).dt.tz_localize(None)
-if "trial_start_date" in df_all.columns:
-    df_all['trial_start_date'] = pd.to_datetime(df_all['trial_start_date'], errors='coerce')
-
-# preprocessing
-df_all['day_bucket'] = df_all['created_at'].dt.date if 'created_at' in df_all.columns else pd.NaT
-df_all['agent_type'] = df_all['function_mode'].astype(str).str.split(":").str[0] if 'function_mode' in df_all.columns else "normal"
+# preprocessing for df_usage
+df_usage['day_bucket'] = df_usage['created_at'].dt.date if 'created_at' in df_usage.columns else pd.NaT
+df_usage['agent_type'] = df_usage['function_mode'].astype(str).str.split(":").str[0] if 'function_mode' in df_usage.columns else "normal"
 
 # 절감 시간 매핑
 time_map = {"deep_research": 40, "pulse_check": 30}
-df_all["saved_minutes"] = df_all["agent_type"].map(time_map).fillna(30)
+df_usage["saved_minutes"] = df_usage["agent_type"].map(time_map).fillna(30)
 
 # UI 설정
 st.title("\U0001F680 Usage Summary Dashboard")
 
-# 조직 리스트 추출 (모든 이벤트 기준)
+# 조직 리스트 추출 (df_usage 기준)
 org_event_counts = (
-    df_all
+    df_usage
     .groupby('organization')
     .size()
     .sort_values(ascending=False)
@@ -135,20 +127,19 @@ else:
 # 조직 선택
 selected_org = st.selectbox("Select Organization", org_list_sorted, index=default_index)
 
-# 데이터 필터링
-df_org = df_all[df_all['organization'] == selected_org]
-df_active = df_org[df_org['status'] == 'active']
+# 선택된 조직의 usage 데이터 필터링
+df_usage_org = df_usage[df_usage['organization'] == selected_org]
 
 # 임시로 organization의 첫 이벤트 날짜를 trial_start_date로 사용
-if 'trial_start_date' not in df_org.columns or df_org['trial_start_date'].isna().all():
-    if not df_org.empty and not df_org['created_at'].isna().all():
-        trial_start_date = df_org['created_at'].min()
+if 'trial_start_date' not in df_usage_org.columns or df_usage_org['trial_start_date'].isna().all():
+    if not df_usage_org.empty and not df_usage_org['created_at'].isna().all():
+        trial_start_date = df_usage_org['created_at'].min()
     else:
         trial_start_date = pd.Timestamp.now()  # 데이터가 없는 경우 현재 날짜 사용
-    df_org['trial_start_date'] = trial_start_date
+    df_usage_org['trial_start_date'] = trial_start_date
 
-# Metric 계산 - df_users.xlsx 기반으로 수정
-total_events = df_org.shape[0]
+# Metric 계산 - df_users.xlsx와 df_usage 기반으로 수정  
+total_events = len(df_usage_org)  # All Events = 선택된 조직의 usage 데이터 전체 카운트
 
 # df_users에서 선택된 organization의 total users 계산
 if 'organization' in df_users.columns:
@@ -168,10 +159,16 @@ else:
 
 active_ratio = f"{active_users} / {total_users}"
 
-# Top user
-if not df_active['user_name'].dropna().empty:
-    top_user = df_active['user_name'].value_counts().idxmax()
-    top_user_count = df_active['user_name'].value_counts().max()
+# Top user (df_usage_org에서 active users의 이메일 기준으로 계산)
+if 'user_email' in df_users_org.columns and 'status' in df_users_org.columns:
+    active_user_emails = df_users_org[df_users_org['status'] == 'active']['user_email'].tolist()
+    df_usage_active = df_usage_org[df_usage_org['user_email'].isin(active_user_emails)]
+else:
+    df_usage_active = df_usage_org  # fallback to all usage
+
+if not df_usage_active['user_name'].dropna().empty:
+    top_user = df_usage_active['user_name'].value_counts().idxmax()
+    top_user_count = df_usage_active['user_name'].value_counts().max()
     top_user_display = f"{top_user} ({top_user_count} times)"
 else:
     top_user_display = "N/A"
@@ -180,11 +177,11 @@ else:
 avg_events = round(total_events / active_users, 1) if active_users > 0 else 0
 
 # 절감 시간 (주차 계산 대신 전체 기간 사용)
-if not df_active.empty and active_users > 0:
+if not df_usage_active.empty and active_users > 0:
     # 전체 사용 기간을 주 단위로 계산
-    date_range = (df_active['created_at'].max() - df_active['created_at'].min()).days
+    date_range = (df_usage_active['created_at'].max() - df_usage_active['created_at'].min()).days
     used_weeks = max(1, date_range // 7)  # 최소 1주
-    total_saved_minutes = df_active["saved_minutes"].sum()
+    total_saved_minutes = df_usage_active["saved_minutes"].sum()
     saved_minutes_per_user_per_week = round(total_saved_minutes / used_weeks / active_users, 1)
     saved_display = f"{saved_minutes_per_user_per_week} min"
 else:
@@ -196,8 +193,8 @@ if 'status' in df_users_org.columns:
     joined_no_usage_emails = df_users_org[df_users_org['status'] == 'joined_no_usage']['user_email'].dropna().unique() if 'user_email' in df_users_org.columns else []
 else:
     # status 컬럼이 없으면 usage 데이터에서 fallback
-    invited_emails = df_org[df_org['status'] == 'invited_not_joined']['user_email'].dropna().unique()
-    joined_no_usage_emails = df_org[df_org['status'] == 'joined_no_usage']['user_email'].dropna().unique()
+    invited_emails = df_usage_org[df_usage_org['status'] == 'invited_not_joined']['user_email'].dropna().unique() if 'status' in df_usage_org.columns else []
+    joined_no_usage_emails = df_usage_org[df_usage_org['status'] == 'joined_no_usage']['user_email'].dropna().unique() if 'status' in df_usage_org.columns else []
 
 invited_display = ", ".join(invited_emails) if len(invited_emails) > 0 else "—"
 joined_display = ", ".join(joined_no_usage_emails) if len(joined_no_usage_emails) > 0 else "—"
@@ -209,8 +206,9 @@ col2.metric("Active / Total Users", active_ratio)
 col3.metric("Top User", top_user_display)
 
 col4, col5, col6 = st.columns(3)
-earnings_users = df_org[df_org['earnings'] == 'onboarded']['user_email'].nunique()
-briefing_users = df_org[df_org['briefing'] == 'onboarded']['user_email'].nunique()
+# earnings, briefings 정보는 df_users에서 가져오기
+earnings_users = len(df_users_org[df_users_org['earnings'] == 'onboarded']) if 'earnings' in df_users_org.columns else 0
+briefing_users = len(df_users_org[df_users_org['briefing'] == 'onboarded']) if 'briefing' in df_users_org.columns else 0
 col4.metric("Earnings/Briefing Users", f"{earnings_users}/{briefing_users}")
 col5.metric("Avg. Events per Active User", avg_events)
 col6.metric("Avg. Time Saved / User / Week", saved_display)
@@ -262,21 +260,21 @@ with status_col1:
 
 with status_col2:
     # Normal만 사용한 유저 찾기
-    all_users = df_org['user_name'].unique()
+    all_users = df_usage_org['user_name'].unique()
     normal_only_users = []
     for user in all_users:
-        user_types = df_org[df_org['user_name'] == user]['agent_type'].unique()
+        user_types = df_usage_org[df_usage_org['user_name'] == user]['agent_type'].unique()
         if len(user_types) == 1 and user_types[0] == 'normal':
             normal_only_users.append(user)
     normal_only_users.sort()
     normal_only_display = ", ".join(normal_only_users) if normal_only_users else "—"
 
     # Recent 2 Weeks Active Users 찾기 (최근 2주간 활성 사용자)
-    if not df_active.empty:
+    if not df_usage_active.empty:
         # 최근 2주간 활성 사용자 찾기
-        recent_date = df_active['created_at'].max()
+        recent_date = df_usage_active['created_at'].max()
         two_weeks_ago = recent_date - pd.Timedelta(days=14)
-        recent_users = df_active[df_active['created_at'] >= two_weeks_ago]['user_name'].unique()
+        recent_users = df_usage_active[df_usage_active['created_at'] >= two_weeks_ago]['user_name'].unique()
         consistent_display = ", ".join(sorted(recent_users)) if len(recent_users) > 0 else "—"
     else:
         consistent_display = "—"
