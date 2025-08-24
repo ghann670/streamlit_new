@@ -920,7 +920,7 @@ with right2:
 st.subheader("👥 Function Usage by User")
 
 # 전체 유저 리스트 (모든 주차의 유저를 포함하도록)
-all_users = sorted(df_org['user_name'].dropna().unique())
+all_users = sorted(df_usage_org['user_name'].dropna().unique())
 
 # 세션 상태에 선택된 유저 저장
 if "selected_user_for_function" not in st.session_state:
@@ -935,7 +935,7 @@ selected_user = st.selectbox(
 
 # 📅 주차 선택 - view mode에 따라 다르게
 if view_mode == "Recent 4 Weeks":
-    week_options = sorted(df_org['week_bucket'].dropna().unique(), reverse=True)
+    week_options = sorted(df_usage_org['week_bucket'].dropna().unique(), reverse=True)
     selected_week = st.selectbox("Select Week", week_options, key="user_week_select")
     
     # 선택된 주차의 날짜 범위 계산
@@ -944,7 +944,7 @@ if view_mode == "Recent 4 Weeks":
 else:
     # Trial Period Mode
     # Trial Week 숫자 추출해서 내림차순 정렬
-    week_options = sorted(df_org['week_from_trial'].unique(), 
+    week_options = sorted(df_usage_org['week_from_trial'].unique(), 
                          key=lambda x: int(x.split()[-1]),
                          reverse=True)
     selected_week = st.selectbox("Select Week", week_options, key="user_week_select")
@@ -953,13 +953,13 @@ else:
     week_num = int(selected_week.split()[-1])
     
     # 해당 주차의 날짜 범위 계산
-    trial_start = pd.to_datetime(df_org['trial_start_date'].iloc[0])
+    trial_start = pd.to_datetime(df_usage_org['trial_start_date'].iloc[0])
     week_start = trial_start + pd.Timedelta(days=(week_num-1)*7)
     week_end = week_start + pd.Timedelta(days=6)
     week_dates = pd.date_range(week_start, week_end).date
 
 # 선택된 주간 데이터 필터링
-df_user_week = df_org[df_org['created_at'].dt.date.isin(week_dates)]
+df_user_week = df_usage_org[df_usage_org['created_at'].dt.date.isin(week_dates)]
 
 # 기본 집계 데이터 준비 (전체 유저)
 df_user_stack_full = df_user_week.groupby(['user_name', 'agent_type']).size().reset_index(name='count')
