@@ -761,7 +761,7 @@ st.subheader("📊 Daily Function Usage for a Selected Week")
 # 📅 주차 선택 - view mode에 따라 다르게
 if view_mode == "Recent 4 Weeks":
     # week_bucket이 없으면 생성
-    if 'week_bucket' not in df_org.columns:
+    if 'week_bucket' not in df_usage_org.columns:
         # 기준 날짜: 오늘 날짜 정오 기준
         now = pd.Timestamp.now().normalize() + pd.Timedelta(hours=12)
         
@@ -782,9 +782,9 @@ if view_mode == "Recent 4 Weeks":
                     return week
             return None
         
-        df_org['week_bucket'] = df_org['created_at'].apply(assign_week_bucket)
+        df_usage_org['week_bucket'] = df_usage_org['created_at'].apply(assign_week_bucket)
     
-    week_options = sorted(df_org['week_bucket'].dropna().unique(), reverse=True)
+    week_options = sorted(df_usage_org['week_bucket'].dropna().unique(), reverse=True)
     selected_week = st.selectbox("Select Week", week_options, key="daily_select_week")
     
     # 선택된 주차의 날짜 범위 계산
@@ -793,7 +793,7 @@ if view_mode == "Recent 4 Weeks":
 else:
     # Trial Period Mode
     # 모든 가능한 Trial Week 생성 (1주차부터 현재까지)
-    max_week = ((pd.Timestamp.now() - df_org['trial_start_date'].min()).days // 7) + 1
+    max_week = ((pd.Timestamp.now() - df_usage_org['trial_start_date'].min()).days // 7) + 1
     week_options = [f'Trial Week {i}' for i in range(max_week, 0, -1)]
     selected_week = st.selectbox("Select Week", week_options, key="daily_select_week")
     
@@ -801,16 +801,16 @@ else:
     week_num = int(selected_week.split()[-1])
     
     # 해당 주차의 날짜 범위 계산
-    trial_start = pd.to_datetime(df_org['trial_start_date'].iloc[0])
+    trial_start = pd.to_datetime(df_usage_org['trial_start_date'].iloc[0])
     week_start = trial_start + pd.Timedelta(days=(week_num-1)*7)
     week_end = week_start + pd.Timedelta(days=6)
     week_dates = pd.date_range(week_start, week_end).date
 
-# 📆 선택된 주간 데이터 필터링 (df_active_org 사용)
-df_week = df_active_org[df_active_org['created_at'].dt.date.isin(week_dates)]
+# 📆 선택된 주간 데이터 필터링 (df_usage_active 사용)
+df_week = df_usage_active[df_usage_active['created_at'].dt.date.isin(week_dates)]
 
 # 📊 일별-기능별 집계
-agent_types = df_active_org['agent_type'].unique()  # 전체 기능 목록 사용
+agent_types = df_usage_active['agent_type'].unique()  # 전체 기능 목록 사용
 
 # 선택된 주의 모든 날짜와 기능 조합 생성
 date_range = pd.date_range(start=min(week_dates), end=max(week_dates), freq='D')
