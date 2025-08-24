@@ -148,11 +148,11 @@ else:
     # organization 컬럼이 없으면 전체 사용자
     df_users_org = df_users
 
-total_users = len(df_users_org)
+total_users = df_users_org['user_email'].nunique()  # 중복 제거
 
-# df_users에서 status가 'active'인 사용자 계산
+# df_users에서 status가 'active'인 사용자 계산 (중복 제거)
 if 'status' in df_users_org.columns:
-    active_users = len(df_users_org[df_users_org['status'] == 'active'])
+    active_users = df_users_org[df_users_org['status'] == 'active']['user_email'].nunique()
 else:
     # status 컬럼이 없으면 모든 사용자를 active로 간주
     active_users = total_users
@@ -187,12 +187,12 @@ if not df_usage_active.empty and active_users > 0:
 else:
     saved_display = "—"
 
-# ✅ Invited & No-Usage Users 추출 - df_users.xlsx 기반으로 수정
+# ✅ Invited & No-Usage Users 추출 - df_users.xlsx 기반으로 수정 (중복 제거)
 if 'status' in df_users_org.columns:
     invited_emails = df_users_org[df_users_org['status'] == 'invited_not_joined']['user_email'].dropna().unique() if 'user_email' in df_users_org.columns else []
     joined_no_usage_emails = df_users_org[df_users_org['status'] == 'joined_no_usage']['user_email'].dropna().unique() if 'user_email' in df_users_org.columns else []
 else:
-    # status 컬럼이 없으면 usage 데이터에서 fallback
+    # status 컬럼이 없으면 usage 데이터에서 fallback (중복 제거)
     invited_emails = df_usage_org[df_usage_org['status'] == 'invited_not_joined']['user_email'].dropna().unique() if 'status' in df_usage_org.columns else []
     joined_no_usage_emails = df_usage_org[df_usage_org['status'] == 'joined_no_usage']['user_email'].dropna().unique() if 'status' in df_usage_org.columns else []
 
@@ -206,9 +206,9 @@ col2.metric("Active / Total Users", active_ratio)
 col3.metric("Top User", top_user_display)
 
 col4, col5, col6 = st.columns(3)
-# earnings, briefings 정보는 df_users에서 가져오기
-earnings_users = len(df_users_org[df_users_org['earnings'] == 'onboarded']) if 'earnings' in df_users_org.columns else 0
-briefing_users = len(df_users_org[df_users_org['briefing'] == 'onboarded']) if 'briefing' in df_users_org.columns else 0
+# earnings, briefings 정보는 df_users에서 가져오기 (중복 제거)
+earnings_users = df_users_org[df_users_org['earnings'] == 'onboarded']['user_email'].nunique() if 'earnings' in df_users_org.columns else 0
+briefing_users = df_users_org[df_users_org['briefing'] == 'onboarded']['user_email'].nunique() if 'briefing' in df_users_org.columns else 0
 col4.metric("Earnings/Briefing Users", f"{earnings_users}/{briefing_users}")
 col5.metric("Avg. Events per Active User", avg_events)
 col6.metric("Avg. Time Saved / User / Week", saved_display)
